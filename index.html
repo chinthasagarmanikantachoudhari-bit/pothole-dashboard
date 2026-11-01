@@ -12,6 +12,7 @@
       --accent: #38bdf8;
       --danger: #ef4444;
       --success: #22c55e;
+      --warning: #f59e0b;
       --text: #f8fafc;
     }
     body {
@@ -100,6 +101,7 @@
     button:hover { background: #475569; }
     button:active { background: var(--accent); color: black; }
     button.danger { background: var(--danger); }
+    button.warning { background: var(--warning); color: black; }
     .telemetry-row {
       display: flex;
       justify-content: space-between;
@@ -115,6 +117,47 @@
       border-radius: 6px;
       font-size: 0.9rem;
     }
+    /* Notification banner */
+    #alertBanner {
+      display: none;
+      background: var(--danger);
+      color: white;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-weight: bold;
+      animation: pulse 1s infinite alternate;
+    }
+    @keyframes pulse {
+      from { opacity: 0.8; }
+      to { opacity: 1; }
+    }
+    /* Incident gallery */
+    .incident-log {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      max-height: 320px;
+      overflow-y: auto;
+      margin-top: 10px;
+    }
+    .incident-item {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 0.8rem;
+    }
+    .incident-item img {
+      width: 100%;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 4px;
+      margin-bottom: 6px;
+    }
+    canvas {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -128,15 +171,19 @@
     </div>
   </header>
 
+  <!-- Live Alert Banner -->
+  <div id="alertBanner">⚠️ Alert Detected! Photo Captured and Coordinates Logged.</div>
+
   <div class="grid">
     <!-- Camera Section -->
     <div class="card">
       <h2>Webcam View</h2>
       <video id="webcam" autoplay playsinline muted></video>
+      <canvas id="snapshotCanvas"></canvas>
       <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
         <button onclick="startCamera()">Start Camera</button>
         <button onclick="switchCamera()">Flip Camera</button>
-        <button class="danger" onclick="reportPothole()">Mark Pothole</button>
+        <button class="danger" onclick="triggerDetection('MANUAL_POTHOLE')">📸 Capture Incident</button>
       </div>
     </div>
 
@@ -157,7 +204,15 @@
       </div>
     </div>
 
-    <!-- Rover Manual Controls -->
+    <!-- Incident Notifications & Captured Photos -->
+    <div class="card" style="grid-column: 1 / -1;">
+      <h2>🚨 Incident & Pothole Log (<span id="incidentCount">0</span> detected)</h2>
+      <div class="incident-log" id="incidentList">
+        <p style="color: #64748b; font-size: 0.9rem;">No incidents captured yet. When an obstacle or pothole is detected, a picture and GPS position will appear here.</p>
+      </div>
+    </div>
+
+    <!-- Rover Controls -->
     <div class="card" style="grid-column: 1 / -1;">
       <h2>Manual Controls</h2>
       <div class="controls">
@@ -179,6 +234,26 @@
     let currentStream = null;
     let facingMode = "environment";
     let curLat = 16.5062, curLng = 80.6480;
+    let incidentCounter = 0;
+    let lastAutoCaptureTime = 0;
+
+    // Beep notification audio
+    function playBeep() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3);
+      } catch (e) {
+        console.warn("Audio Context blocked:", e);
+      }
+    }
 
     function initMap() {
       map = L.map('map').setView([curLat, curLng], 15);
@@ -204,8 +279,79 @@
     }
 
     function switchCamera() {
-      facingMode = facingMode === "user" ? "environment" : "user";
+      facingMode = (facingMode === "user") ? "environment" : "user";
       startCamera();
+    }
+
+    function capturePhoto() {
+      const video = document.getElementById('webcam');
+      const canvas = document.getElementById('snapshotCanvas');
+      if (!video.videoWidth) return null;
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // Stamp timestamp & GPS coordinates right on the photo
+      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+      ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "16px sans-serif";
+      ctx.fillText(`${new Date().toLocaleTimeString()} | Lat: ${curLat.toFixed(6)}, Lng: ${curLng.toFixed(6)}`, 15, canvas.height - 15);
+
+      return canvas.toDataURL('image/jpeg');
+    }
+
+    function triggerDetection(type) {
+      playBeep();
+
+      // Show alert banner
+      const banner = document.getElementById('alertBanner');
+      banner.style.display = 'block';
+      banner.innerText = `🚨 ${type}: Incident captured at Lat ${curLat.toFixed(6)}, Lng ${curLng.toFixed(6)}`;
+      setTimeout(() => { banner.style.display = 'none'; }, 4000);
+
+      // Pin on map
+      const potholeIcon = L.circleMarker([curLat, curLng], {
+        color: 'red',
+        fillColor: '#f03',
+        fillOpacity: 0.8,
+        radius: 9
+      }).addTo(map);
+      potholeIcon.bindPopup(`<b>${type}</b><br>Lat: ${curLat.toFixed(6)}<br>Lng: ${curLng.toFixed(6)}<br>${new Date().toLocaleTimeString()}`).openPopup();
+
+      // Take photo
+      const photoData = capturePhoto();
+      addIncidentCard(type, photoData);
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send("POTHOLE_LOGGED");
+      }
+    }
+
+    function addIncidentCard(type, photoData) {
+      incidentCounter++;
+      document.getElementById('incidentCount').textContent = incidentCounter;
+      const container = document.getElementById('incidentList');
+
+      if (incidentCounter === 1) container.innerHTML = '';
+
+      const card = document.createElement('div');
+      card.className = 'incident-item';
+
+      const imgTag = photoData 
+        ? `<img src="${photoData}" alt="Incident photo">` 
+        : `<div style="background:#334155;height:80px;display:flex;align-items:center;justify-content:center;border-radius:4px;margin-bottom:6px;">No Video Feed</div>`;
+
+      card.innerHTML = `
+        ${imgTag}
+        <strong style="color: var(--danger);">${type} #${incidentCounter}</strong><br>
+        <span>🕒 ${new Date().toLocaleTimeString()}</span><br>
+        <span>📍 ${curLat.toFixed(5)}, ${curLng.toFixed(5)}</span><br>
+        ${photoData ? `<a href="${photoData}" download="incident_${incidentCounter}.jpg" style="color:var(--accent);text-decoration:none;font-size:0.75rem;">⬇ Download Photo</a>` : ''}
+      `;
+      container.prepend(card);
     }
 
     function toggleWebSocket() {
@@ -224,6 +370,7 @@
 
       ws.onmessage = (event) => {
         const msg = event.data;
+
         if (msg.startsWith("GPS:")) {
           const parts = msg.replace("GPS:", "").split(",");
           const lat = parseFloat(parts[0]);
@@ -236,11 +383,23 @@
             marker.setLatLng([lat, lng]);
             map.panTo([lat, lng]);
           }
-        } else if (msg.startsWith("OBSTACLE:")) {
+        } 
+        else if (msg.startsWith("OBSTACLE:")) {
           const status = msg.replace("OBSTACLE:", "");
           const el = document.getElementById('obstacleVal');
           el.textContent = status;
-          el.style.color = (status === "FRONT_DETECTED") ? "#ef4444" : "#22c55e";
+
+          if (status === "FRONT_DETECTED") {
+            el.style.color = "#ef4444";
+            // Auto-trigger photo if 3 seconds passed since last capture
+            const now = Date.now();
+            if (now - lastAutoCaptureTime > 3000) {
+              lastAutoCaptureTime = now;
+              triggerDetection("AUTO_OBSTACLE_POTHOLE");
+            }
+          } else {
+            el.style.color = "#22c55e";
+          }
         }
       };
 
@@ -250,31 +409,12 @@
         document.getElementById('wsBtn').textContent = "Connect ESP32";
       };
 
-      ws.onerror = (err) => {
-        console.error("WS Error:", err);
-      };
+      ws.onerror = (err) => console.error("WS Error:", err);
     }
 
     function sendCommand(cmd) {
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(cmd);
-      } else {
-        console.warn("WebSocket not connected. Command dropped:", cmd);
-      }
-    }
-
-    function reportPothole() {
-      if (map) {
-        const potholeIcon = L.circleMarker([curLat, curLng], {
-          color: 'red',
-          fillColor: '#f03',
-          fillOpacity: 0.7,
-          radius: 8
-        }).addTo(map);
-        potholeIcon.bindPopup(`<b>Pothole Logged!</b><br>Lat: ${curLat}<br>Lng: ${curLng}`).openPopup();
-      }
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send("POTHOLE_LOGGED");
       }
     }
   </script>
