@@ -3,21 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pothole Rover Dashboard</title>
+  <title>Rover Mission Control & Incident Hub</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     :root {
-      --bg: #0f172a;
-      --card-bg: #1e293b;
+      --bg: #0b0f19;
+      --panel: #151d30;
+      --card: #1e293b;
       --accent: #38bdf8;
       --danger: #ef4444;
       --success: #22c55e;
       --warning: #f59e0b;
       --text: #f8fafc;
+      --muted: #94a3b8;
     }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
-      padding: 16px;
+      padding: 12px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: var(--bg);
       color: var(--text);
@@ -27,194 +30,225 @@
       flex-wrap: wrap;
       justify-content: space-between;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 16px;
+      gap: 10px;
       padding-bottom: 12px;
+      margin-bottom: 12px;
       border-bottom: 1px solid #334155;
     }
-    h1 {
-      margin: 0;
-      font-size: 1.3rem;
-      color: var(--accent);
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
-    .status-badge {
-      padding: 5px 12px;
+    h1 { margin: 0; font-size: 1.2rem; color: var(--accent); }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-pill {
+      padding: 4px 10px;
       border-radius: 9999px;
-      font-size: 0.85rem;
-      font-weight: 600;
+      font-size: 0.8rem;
+      font-weight: 700;
     }
-    .disconnected { background: #475569; color: #fff; }
+    .disconnected { background: #475569; }
     .connected { background: var(--success); color: #000; }
+    .btn-notif {
+      background: var(--card);
+      border: 1px solid var(--accent);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+      position: relative;
+    }
+    .badge {
+      background: var(--danger);
+      color: #fff;
+      font-size: 0.75rem;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-weight: bold;
+    }
+    /* Layout */
     .grid {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 16px;
+      gap: 12px;
     }
     @media (min-width: 850px) {
       .grid { grid-template-columns: 1fr 1fr; }
     }
-    .card {
-      background: var(--card-bg);
+    .panel {
+      background: var(--panel);
       border-radius: 12px;
-      padding: 16px;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+      padding: 14px;
+      border: 1px solid #1e293b;
     }
-    .card h2 {
-      margin-top: 0;
-      font-size: 1.1rem;
-      color: #94a3b8;
+    .panel-title {
+      margin: 0 0 10px 0;
+      font-size: 1rem;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
     video {
       width: 100%;
-      height: 240px;
+      height: 230px;
       object-fit: cover;
       border-radius: 8px;
       background: #000;
     }
     #map {
       width: 100%;
-      height: 240px;
+      height: 230px;
       border-radius: 8px;
-      background: #334155;
     }
-    .controls {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 8px;
-      margin-top: 10px;
-    }
-    .control-row {
-      display: flex;
-      gap: 8px;
-    }
-    button {
-      background: #334155;
-      color: white;
-      border: none;
-      padding: 10px 16px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: bold;
-      transition: background 0.15s ease;
-    }
-    button:hover { background: #475569; }
-    button:active { background: var(--accent); color: black; }
-    button.danger { background: var(--danger); }
-    button.warning { background: var(--warning); color: black; }
     .telemetry-row {
       display: flex;
       justify-content: space-between;
       padding: 6px 0;
-      border-bottom: 1px solid #334155;
-      font-size: 0.95rem;
+      border-bottom: 1px solid #1e293b;
+      font-size: 0.88rem;
     }
+    /* Controls */
+    .controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .control-row { display: flex; gap: 6px; }
+    button {
+      background: #334155;
+      color: #fff;
+      border: none;
+      padding: 9px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button:hover { background: #475569; }
+    button.danger { background: var(--danger); }
     .ip-input {
-      background: #0f172a;
+      background: var(--bg);
       border: 1px solid #475569;
       color: #fff;
       padding: 6px 10px;
       border-radius: 6px;
-      font-size: 0.9rem;
+      font-size: 0.85rem;
+      width: 110px;
     }
-    /* Notification banner */
-    #alertBanner {
+    /* Notifications Tray (Sidebar / Drawer) */
+    #notifModal {
       display: none;
-      background: var(--danger);
-      color: white;
-      padding: 12px;
-      border-radius: 8px;
-      margin-bottom: 16px;
-      font-weight: bold;
-      animation: pulse 1s infinite alternate;
-    }
-    @keyframes pulse {
-      from { opacity: 0.8; }
-      to { opacity: 1; }
-    }
-    /* Incident gallery */
-    .incident-log {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 12px;
-      max-height: 320px;
-      overflow-y: auto;
-      margin-top: 10px;
-    }
-    .incident-item {
-      background: #0f172a;
-      border: 1px solid #334155;
-      border-radius: 8px;
-      padding: 8px;
-      font-size: 0.8rem;
-    }
-    .incident-item img {
+      position: fixed;
+      top: 0; right: 0; bottom: 0;
       width: 100%;
-      height: 120px;
+      max-width: 420px;
+      background: #0f172a;
+      box-shadow: -4px 0 20px rgba(0,0,0,0.7);
+      z-index: 9999;
+      padding: 16px;
+      overflow-y: auto;
+      border-left: 1px solid #334155;
+    }
+    .modal-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+    .incident-card {
+      background: var(--card);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 12px;
+      border: 1px solid #334155;
+      font-size: 0.82rem;
+    }
+    .incident-card img {
+      width: 100%;
+      height: 140px;
       object-fit: cover;
-      border-radius: 4px;
-      margin-bottom: 6px;
+      border-radius: 6px;
+      margin-bottom: 8px;
     }
-    canvas {
-      display: none;
+    .gmaps-btn {
+      display: inline-block;
+      margin-top: 6px;
+      background: #2563eb;
+      color: #fff;
+      padding: 5px 10px;
+      border-radius: 5px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.75rem;
     }
+    canvas { display: none; }
   </style>
 </head>
 <body>
 
   <header>
-    <h1>🚗 Pothole Rover Telemetry</h1>
-    <div>
-      <input type="text" id="espIp" class="ip-input" value="192.168.4.1" placeholder="ESP32 IP" />
-      <button id="wsBtn" onclick="toggleWebSocket()">Connect ESP32</button>
-      <span id="wsStatus" class="status-badge disconnected">Offline</span>
+    <div class="header-left">
+      <h1>🚗 Rover Mission Hub</h1>
+      <button class="btn-notif" onclick="toggleNotifPanel()">
+        🔔 Notifications <span id="badgeCount" class="badge">0</span>
+      </button>
+    </div>
+    <div class="header-actions">
+      <input type="text" id="espIp" class="ip-input" value="192.168.4.1" />
+      <button id="wsBtn" onclick="toggleWebSocket()">Connect</button>
+      <span id="wsStatus" class="status-pill disconnected">Offline</span>
     </div>
   </header>
 
-  <!-- Live Alert Banner -->
-  <div id="alertBanner">⚠️ Alert Detected! Photo Captured and Coordinates Logged.</div>
-
   <div class="grid">
     <!-- Camera Section -->
-    <div class="card">
-      <h2>Webcam View</h2>
+    <div class="panel">
+      <div class="panel-title">
+        <span>Live Camera</span>
+        <div>
+          <button onclick="startCamera()">Start Cam</button>
+          <button onclick="switchCamera()">Flip</button>
+        </div>
+      </div>
       <video id="webcam" autoplay playsinline muted></video>
       <canvas id="snapshotCanvas"></canvas>
-      <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
-        <button onclick="startCamera()">Start Camera</button>
-        <button onclick="switchCamera()">Flip Camera</button>
-        <button class="danger" onclick="triggerDetection('MANUAL_POTHOLE')">📸 Capture Incident</button>
+      <div style="margin-top: 10px;">
+        <button class="danger" style="width: 100%;" onclick="logIncident('MANUAL_MARK')">
+          📸 Manual Capture & Log Pothole
+        </button>
       </div>
     </div>
 
-    <!-- Map & GPS Section -->
-    <div class="card">
-      <h2>Live GPS Map</h2>
+    <!-- Live Map Section -->
+    <div class="panel">
+      <div class="panel-title">Live GPS Location</div>
       <div id="map"></div>
       <div style="margin-top: 10px;">
         <div class="telemetry-row">
-          <span>Latitude:</span> <strong id="latVal">Waiting...</strong>
+          <span>Coordinates:</span> <strong id="coordsVal">Waiting for GPS fix...</strong>
         </div>
         <div class="telemetry-row">
-          <span>Longitude:</span> <strong id="lngVal">Waiting...</strong>
-        </div>
-        <div class="telemetry-row">
-          <span>Ultrasonic Sensor:</span> <strong id="obstacleVal">Clear</strong>
+          <span>Ultrasonic Sensor:</span> <strong id="obstacleVal" style="color:var(--success)">CLEAR</strong>
         </div>
       </div>
     </div>
 
-    <!-- Incident Notifications & Captured Photos -->
-    <div class="card" style="grid-column: 1 / -1;">
-      <h2>🚨 Incident & Pothole Log (<span id="incidentCount">0</span> detected)</h2>
-      <div class="incident-log" id="incidentList">
-        <p style="color: #64748b; font-size: 0.9rem;">No incidents captured yet. When an obstacle or pothole is detected, a picture and GPS position will appear here.</p>
-      </div>
-    </div>
-
-    <!-- Rover Controls -->
-    <div class="card" style="grid-column: 1 / -1;">
-      <h2>Manual Controls</h2>
+    <!-- Movement Controls -->
+    <div class="panel" style="grid-column: 1 / -1;">
+      <div class="panel-title">Rover Navigation</div>
       <div class="controls">
         <button onclick="sendCommand('FORWARD')">▲ FORWARD</button>
         <div class="control-row">
@@ -227,54 +261,59 @@
     </div>
   </div>
 
+  <!-- Notification Drawer / Modal -->
+  <div id="notifModal">
+    <div class="modal-head">
+      <h2 style="margin: 0; font-size: 1.1rem; color: var(--accent);">🚨 Incident Log</h2>
+      <div>
+        <button onclick="clearNotifications()" style="padding: 4px 8px; font-size: 0.75rem;">Clear</button>
+        <button onclick="toggleNotifPanel()" style="padding: 4px 8px; font-size: 0.75rem;">✕ Close</button>
+      </div>
+    </div>
+    <div id="notificationList">
+      <p style="color: var(--muted); font-size: 0.85rem;">No detections registered yet.</p>
+    </div>
+  </div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     let ws;
     let map, marker;
     let currentStream = null;
     let facingMode = "environment";
-    let curLat = 16.5062, curLng = 80.6480;
-    let incidentCounter = 0;
-    let lastAutoCaptureTime = 0;
+    let curLat = 16.5062, curLng = 80.6480; // Default fallback
+    let incidentCount = 0;
+    let lastAutoTrigger = 0;
 
-    // Beep notification audio
-    function playBeep() {
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.type = "sawtooth";
-        osc.frequency.setValueAtTime(880, ctx.currentTime);
-        gain.gain.setValueAtTime(0.2, ctx.currentTime);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.3);
-      } catch (e) {
-        console.warn("Audio Context blocked:", e);
-      }
-    }
+    // Load saved incidents from local storage
+    const savedIncidents = JSON.parse(localStorage.getItem('rover_incidents') || '[]');
 
     function initMap() {
       map = L.map('map').setView([curLat, curLng], 15);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19
-      }).addTo(map);
-      marker = L.marker([curLat, curLng]).addTo(map).bindPopup("Rover Position");
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+      marker = L.marker([curLat, curLng]).addTo(map).bindPopup("Rover Current Position");
     }
     initMap();
 
-    async function startCamera() {
-      if (currentStream) {
-        currentStream.getTracks().forEach(track => track.stop());
+    // Render any incidents from previous sessions
+    function loadSavedIncidents() {
+      if (savedIncidents.length > 0) {
+        document.getElementById('notificationList').innerHTML = '';
+        savedIncidents.forEach(item => renderIncidentCard(item, false));
+        incidentCount = savedIncidents.length;
+        document.getElementById('badgeCount').textContent = incidentCount;
       }
+    }
+    loadSavedIncidents();
+
+    // Camera control
+    async function startCamera() {
+      if (currentStream) currentStream.getTracks().forEach(t => t.stop());
       try {
-        currentStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: facingMode }
-        });
+        currentStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
         document.getElementById('webcam').srcObject = currentStream;
       } catch (err) {
-        alert("Camera access denied or unavailable: " + err.message);
+        alert("Camera error: " + err.message);
       }
     }
 
@@ -283,7 +322,7 @@
       startCamera();
     }
 
-    function capturePhoto() {
+    function takeSnapshot() {
       const video = document.getElementById('webcam');
       const canvas = document.getElementById('snapshotCanvas');
       if (!video.videoWidth) return null;
@@ -293,67 +332,120 @@
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // Stamp timestamp & GPS coordinates right on the photo
-      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+      // Watermark
+      ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
       ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
       ctx.fillStyle = "#ffffff";
       ctx.font = "16px sans-serif";
-      ctx.fillText(`${new Date().toLocaleTimeString()} | Lat: ${curLat.toFixed(6)}, Lng: ${curLng.toFixed(6)}`, 15, canvas.height - 15);
+      ctx.fillText(`${new Date().toLocaleTimeString()} | Lat: ${curLat.toFixed(6)}, Lng: ${curLng.toFixed(6)}`, 14, canvas.height - 15);
 
       return canvas.toDataURL('image/jpeg');
     }
 
-    function triggerDetection(type) {
-      playBeep();
+    // Reverse Geocoding (Converts GPS -> Street/City address)
+    async function fetchAddress(lat, lng) {
+      try {
+        const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+        const data = await resp.json();
+        return data.display_name || "Street Address Not Available";
+      } catch (e) {
+        return "Offline / Address Lookup Unavailable";
+      }
+    }
 
-      // Show alert banner
-      const banner = document.getElementById('alertBanner');
-      banner.style.display = 'block';
-      banner.innerText = `🚨 ${type}: Incident captured at Lat ${curLat.toFixed(6)}, Lng ${curLng.toFixed(6)}`;
-      setTimeout(() => { banner.style.display = 'none'; }, 4000);
+    // Audio chime on detection
+    function ringAlert() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.setValueAtTime(750, ctx.currentTime);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.25);
+      } catch (e) {}
+    }
 
-      // Pin on map
-      const potholeIcon = L.circleMarker([curLat, curLng], {
-        color: 'red',
-        fillColor: '#f03',
-        fillOpacity: 0.8,
-        radius: 9
-      }).addTo(map);
-      potholeIcon.bindPopup(`<b>${type}</b><br>Lat: ${curLat.toFixed(6)}<br>Lng: ${curLng.toFixed(6)}<br>${new Date().toLocaleTimeString()}`).openPopup();
+    // Main Incident Processor
+    async function logIncident(type) {
+      ringAlert();
+      const photo = takeSnapshot();
+      const timeStr = new Date().toLocaleTimeString();
+      const lat = curLat;
+      const lng = curLng;
 
-      // Take photo
-      const photoData = capturePhoto();
-      addIncidentCard(type, photoData);
+      // Pin on the map
+      const pin = L.circleMarker([lat, lng], { color: 'red', fillColor: '#f03', fillOpacity: 0.8, radius: 9 }).addTo(map);
+      pin.bindPopup(`<b>${type}</b><br>${timeStr}`).openPopup();
+
+      // Retrieve full address
+      const address = await fetchAddress(lat, lng);
+
+      const incidentData = {
+        id: Date.now(),
+        type,
+        time: timeStr,
+        lat: lat.toFixed(6),
+        lng: lng.toFixed(6),
+        address,
+        photo
+      };
+
+      savedIncidents.unshift(incidentData);
+      localStorage.setItem('rover_incidents', JSON.stringify(savedIncidents.slice(0, 30)));
+
+      renderIncidentCard(incidentData, true);
+
+      incidentCount++;
+      document.getElementById('badgeCount').textContent = incidentCount;
 
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send("POTHOLE_LOGGED");
       }
     }
 
-    function addIncidentCard(type, photoData) {
-      incidentCounter++;
-      document.getElementById('incidentCount').textContent = incidentCounter;
-      const container = document.getElementById('incidentList');
-
-      if (incidentCounter === 1) container.innerHTML = '';
+    function renderIncidentCard(data, prepend = true) {
+      const list = document.getElementById('notificationList');
+      if (incidentCount === 0 && prepend) list.innerHTML = '';
 
       const card = document.createElement('div');
-      card.className = 'incident-item';
+      card.className = 'incident-card';
 
-      const imgTag = photoData 
-        ? `<img src="${photoData}" alt="Incident photo">` 
-        : `<div style="background:#334155;height:80px;display:flex;align-items:center;justify-content:center;border-radius:4px;margin-bottom:6px;">No Video Feed</div>`;
+      const mapLink = `https://www.google.com/maps?q=${data.lat},${data.lng}`;
+      const imgTag = data.photo ? `<img src="${data.photo}" alt="Incident">` : `<div style="background:#0f172a;height:80px;display:flex;align-items:center;justify-content:center;border-radius:4px;margin-bottom:6px;">No Image</div>`;
 
       card.innerHTML = `
         ${imgTag}
-        <strong style="color: var(--danger);">${type} #${incidentCounter}</strong><br>
-        <span>🕒 ${new Date().toLocaleTimeString()}</span><br>
-        <span>📍 ${curLat.toFixed(5)}, ${curLng.toFixed(5)}</span><br>
-        ${photoData ? `<a href="${photoData}" download="incident_${incidentCounter}.jpg" style="color:var(--accent);text-decoration:none;font-size:0.75rem;">⬇ Download Photo</a>` : ''}
+        <strong style="color:var(--danger)">⚠️ ${data.type}</strong>
+        <div style="margin-top:4px;">🕒 <b>Time:</b> ${data.time}</div>
+        <div>📍 <b>GPS:</b> ${data.lat}, ${data.lng}</div>
+        <div style="margin-top:4px; color:var(--muted);">🏛️ <b>Location:</b> ${data.address}</div>
+        <div style="margin-top:6px; display:flex; gap:8px;">
+          <a class="gmaps-btn" href="${mapLink}" target="_blank">🗺️ Open Google Maps</a>
+          ${data.photo ? `<a class="gmaps-btn" style="background:#475569;" href="${data.photo}" download="incident_${data.id}.jpg">⬇ Save Photo</a>` : ''}
+        </div>
       `;
-      container.prepend(card);
+
+      if (prepend) list.prepend(card);
+      else list.appendChild(card);
     }
 
+    function toggleNotifPanel() {
+      const modal = document.getElementById('notifModal');
+      modal.style.display = (modal.style.display === 'block') ? 'none' : 'block';
+    }
+
+    function clearNotifications() {
+      localStorage.removeItem('rover_incidents');
+      savedIncidents.length = 0;
+      incidentCount = 0;
+      document.getElementById('badgeCount').textContent = '0';
+      document.getElementById('notificationList').innerHTML = '<p style="color: var(--muted); font-size: 0.85rem;">No detections registered yet.</p>';
+    }
+
+    // WebSocket Integration
     function toggleWebSocket() {
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.close();
@@ -364,7 +456,7 @@
 
       ws.onopen = () => {
         document.getElementById('wsStatus').textContent = "Online";
-        document.getElementById('wsStatus').className = "status-badge connected";
+        document.getElementById('wsStatus').className = "status-pill connected";
         document.getElementById('wsBtn').textContent = "Disconnect";
       };
 
@@ -378,8 +470,7 @@
           if (!isNaN(lat) && !isNaN(lng)) {
             curLat = lat;
             curLng = lng;
-            document.getElementById('latVal').textContent = lat.toFixed(6);
-            document.getElementById('lngVal').textContent = lng.toFixed(6);
+            document.getElementById('coordsVal').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
             marker.setLatLng([lat, lng]);
             map.panTo([lat, lng]);
           }
@@ -390,32 +481,30 @@
           el.textContent = status;
 
           if (status === "FRONT_DETECTED") {
-            el.style.color = "#ef4444";
-            // Auto-trigger photo if 3 seconds passed since last capture
+            el.style.color = "var(--danger)";
             const now = Date.now();
-            if (now - lastAutoCaptureTime > 3000) {
-              lastAutoCaptureTime = now;
-              triggerDetection("AUTO_OBSTACLE_POTHOLE");
+            // Automatically capture every 3.5 seconds when an obstacle/pothole is continuously detected
+            if (now - lastAutoTrigger > 3500) {
+              lastAutoTrigger = now;
+              logIncident("AUTO_POTHOLE_OBSTACLE");
             }
           } else {
-            el.style.color = "#22c55e";
+            el.style.color = "var(--success)";
           }
         }
       };
 
       ws.onclose = () => {
         document.getElementById('wsStatus').textContent = "Offline";
-        document.getElementById('wsStatus').className = "status-badge disconnected";
-        document.getElementById('wsBtn').textContent = "Connect ESP32";
+        document.getElementById('wsStatus').className = "status-pill disconnected";
+        document.getElementById('wsBtn').textContent = "Connect";
       };
 
-      ws.onerror = (err) => console.error("WS Error:", err);
+      ws.onerror = (err) => console.error("WS error:", err);
     }
 
     function sendCommand(cmd) {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(cmd);
-      }
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(cmd);
     }
   </script>
 </body>
