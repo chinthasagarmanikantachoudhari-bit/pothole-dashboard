@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Rover Mission Control & Incident Hub</title>
+  <title>Autonomous Rover Mission Hub</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     :root {
@@ -40,7 +40,7 @@
       align-items: center;
       gap: 12px;
     }
-    h1 { margin: 0; font-size: 1.2rem; color: var(--accent); }
+    h1 { margin: 0; font-size: 1.15rem; color: var(--accent); }
     .header-actions {
       display: flex;
       align-items: center;
@@ -65,7 +65,6 @@
       align-items: center;
       gap: 6px;
       font-weight: 600;
-      position: relative;
     }
     .badge {
       background: var(--danger);
@@ -75,7 +74,6 @@
       border-radius: 999px;
       font-weight: bold;
     }
-    /* Layout */
     .grid {
       display: grid;
       grid-template-columns: 1fr;
@@ -92,7 +90,7 @@
     }
     .panel-title {
       margin: 0 0 10px 0;
-      font-size: 1rem;
+      font-size: 0.95rem;
       color: var(--muted);
       display: flex;
       justify-content: space-between;
@@ -100,14 +98,14 @@
     }
     video {
       width: 100%;
-      height: 230px;
+      height: 220px;
       object-fit: cover;
       border-radius: 8px;
       background: #000;
     }
     #map {
       width: 100%;
-      height: 230px;
+      height: 220px;
       border-radius: 8px;
     }
     .telemetry-row {
@@ -117,7 +115,29 @@
       border-bottom: 1px solid #1e293b;
       font-size: 0.88rem;
     }
-    /* Controls */
+    /* Mode Selectors */
+    .mode-bar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .mode-btn {
+      flex: 1;
+      padding: 12px;
+      font-size: 1rem;
+      border-radius: 8px;
+      border: 2px solid #334155;
+      background: #1e293b;
+      color: #94a3b8;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.2s ease;
+    }
+    .mode-btn.active {
+      border-color: var(--accent);
+      background: #0284c7;
+      color: #fff;
+    }
     .controls {
       display: flex;
       flex-direction: column;
@@ -135,26 +155,25 @@
       cursor: pointer;
       font-weight: 600;
     }
-    button:hover { background: #475569; }
+    button:active { background: var(--accent); color: black; }
     button.danger { background: var(--danger); }
     .ip-input {
       background: var(--bg);
       border: 1px solid #475569;
       color: #fff;
-      padding: 6px 10px;
+      padding: 6px 8px;
       border-radius: 6px;
       font-size: 0.85rem;
       width: 110px;
     }
-    /* Notifications Tray (Sidebar / Drawer) */
     #notifModal {
       display: none;
       position: fixed;
       top: 0; right: 0; bottom: 0;
       width: 100%;
-      max-width: 420px;
+      max-width: 400px;
       background: #0f172a;
-      box-shadow: -4px 0 20px rgba(0,0,0,0.7);
+      box-shadow: -4px 0 20px rgba(0,0,0,0.8);
       z-index: 9999;
       padding: 16px;
       overflow-y: auto;
@@ -188,7 +207,7 @@
       margin-top: 6px;
       background: #2563eb;
       color: #fff;
-      padding: 5px 10px;
+      padding: 6px 12px;
       border-radius: 5px;
       text-decoration: none;
       font-weight: 600;
@@ -201,23 +220,23 @@
 
   <header>
     <div class="header-left">
-      <h1>🚗 Rover Mission Hub</h1>
+      <h1>🚗 Rover Hub</h1>
       <button class="btn-notif" onclick="toggleNotifPanel()">
         🔔 Notifications <span id="badgeCount" class="badge">0</span>
       </button>
     </div>
     <div class="header-actions">
       <input type="text" id="espIp" class="ip-input" value="192.168.4.1" />
-      <button id="wsBtn" onclick="toggleWebSocket()">Connect</button>
+      <button id="wsBtn" onclick="toggleConnection()">Connect</button>
       <span id="wsStatus" class="status-pill disconnected">Offline</span>
     </div>
   </header>
 
   <div class="grid">
-    <!-- Camera Section -->
+    <!-- Camera View -->
     <div class="panel">
       <div class="panel-title">
-        <span>Live Camera</span>
+        <span>Phone Webcam Feed</span>
         <div>
           <button onclick="startCamera()">Start Cam</button>
           <button onclick="switchCamera()">Flip</button>
@@ -227,18 +246,18 @@
       <canvas id="snapshotCanvas"></canvas>
       <div style="margin-top: 10px;">
         <button class="danger" style="width: 100%;" onclick="logIncident('MANUAL_MARK')">
-          📸 Manual Capture & Log Pothole
+          📸 Manual Snap & Log Pothole
         </button>
       </div>
     </div>
 
-    <!-- Live Map Section -->
+    <!-- Live Map -->
     <div class="panel">
       <div class="panel-title">Live GPS Location</div>
       <div id="map"></div>
       <div style="margin-top: 10px;">
         <div class="telemetry-row">
-          <span>Coordinates:</span> <strong id="coordsVal">Waiting for GPS fix...</strong>
+          <span>Coordinates:</span> <strong id="coordsVal">Waiting for GPS...</strong>
         </div>
         <div class="telemetry-row">
           <span>Ultrasonic Sensor:</span> <strong id="obstacleVal" style="color:var(--success)">CLEAR</strong>
@@ -246,10 +265,16 @@
       </div>
     </div>
 
-    <!-- Movement Controls -->
+    <!-- Mode Selector & Controls -->
     <div class="panel" style="grid-column: 1 / -1;">
-      <div class="panel-title">Rover Navigation</div>
-      <div class="controls">
+      <div class="panel-title">Drive Mode & Controls</div>
+
+      <div class="mode-bar">
+        <button id="btnManual" class="mode-btn active" onclick="setMode('MANUAL')">🕹️ MANUAL MODE</button>
+        <button id="btnAuto" class="mode-btn" onclick="setMode('AUTO')">🤖 AUTOMATIC MODE</button>
+      </div>
+
+      <div id="manualControlsArea" class="controls">
         <button onclick="sendCommand('FORWARD')">▲ FORWARD</button>
         <div class="control-row">
           <button onclick="sendCommand('LEFT')">◄ LEFT</button>
@@ -258,13 +283,16 @@
         </div>
         <button onclick="sendCommand('BACKWARD')">▼ BACKWARD</button>
       </div>
+      <div id="autoStatusArea" style="display:none; text-align:center; padding: 12px; color: var(--accent); font-weight: bold;">
+        🚗 Autonomous Pilot Engaged — Rover is steering around obstacles automatically.
+      </div>
     </div>
   </div>
 
-  <!-- Notification Drawer / Modal -->
+  <!-- Notification Drawer -->
   <div id="notifModal">
     <div class="modal-head">
-      <h2 style="margin: 0; font-size: 1.1rem; color: var(--accent);">🚨 Incident Log</h2>
+      <h2 style="margin: 0; font-size: 1.1rem; color: var(--accent);">🚨 Pothole & Incident Records</h2>
       <div>
         <button onclick="clearNotifications()" style="padding: 4px 8px; font-size: 0.75rem;">Clear</button>
         <button onclick="toggleNotifPanel()" style="padding: 4px 8px; font-size: 0.75rem;">✕ Close</button>
@@ -277,25 +305,24 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    let ws;
+    let ws = null;
+    let pollTimer = null;
     let map, marker;
     let currentStream = null;
     let facingMode = "environment";
-    let curLat = 16.5062, curLng = 80.6480; // Default fallback
+    let curLat = 16.5062, curLng = 80.6480;
     let incidentCount = 0;
     let lastAutoTrigger = 0;
 
-    // Load saved incidents from local storage
     const savedIncidents = JSON.parse(localStorage.getItem('rover_incidents') || '[]');
 
     function initMap() {
       map = L.map('map').setView([curLat, curLng], 15);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-      marker = L.marker([curLat, curLng]).addTo(map).bindPopup("Rover Current Position");
+      marker = L.marker([curLat, curLng]).addTo(map).bindPopup("Rover Position");
     }
     initMap();
 
-    // Render any incidents from previous sessions
     function loadSavedIncidents() {
       if (savedIncidents.length > 0) {
         document.getElementById('notificationList').innerHTML = '';
@@ -306,11 +333,12 @@
     }
     loadSavedIncidents();
 
-    // Camera control
     async function startCamera() {
       if (currentStream) currentStream.getTracks().forEach(t => t.stop());
       try {
-        currentStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
+        currentStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: facingMode } }
+        });
         document.getElementById('webcam').srcObject = currentStream;
       } catch (err) {
         alert("Camera error: " + err.message);
@@ -332,55 +360,34 @@
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // Watermark
-      ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-      ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
+      ctx.fillRect(0, canvas.height - 42, canvas.width, 42);
       ctx.fillStyle = "#ffffff";
       ctx.font = "16px sans-serif";
-      ctx.fillText(`${new Date().toLocaleTimeString()} | Lat: ${curLat.toFixed(6)}, Lng: ${curLng.toFixed(6)}`, 14, canvas.height - 15);
+      ctx.fillText(`${new Date().toLocaleTimeString()} | GPS: ${curLat.toFixed(6)}, ${curLng.toFixed(6)}`, 14, canvas.height - 16);
 
       return canvas.toDataURL('image/jpeg');
     }
 
-    // Reverse Geocoding (Converts GPS -> Street/City address)
     async function fetchAddress(lat, lng) {
       try {
         const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
         const data = await resp.json();
-        return data.display_name || "Street Address Not Available";
+        return data.display_name || "Street address not found";
       } catch (e) {
-        return "Offline / Address Lookup Unavailable";
+        return "Address lookup unavailable";
       }
     }
 
-    // Audio chime on detection
-    function ringAlert() {
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.frequency.setValueAtTime(750, ctx.currentTime);
-        gain.gain.setValueAtTime(0.2, ctx.currentTime);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.25);
-      } catch (e) {}
-    }
-
-    // Main Incident Processor
     async function logIncident(type) {
-      ringAlert();
       const photo = takeSnapshot();
       const timeStr = new Date().toLocaleTimeString();
       const lat = curLat;
       const lng = curLng;
 
-      // Pin on the map
       const pin = L.circleMarker([lat, lng], { color: 'red', fillColor: '#f03', fillOpacity: 0.8, radius: 9 }).addTo(map);
       pin.bindPopup(`<b>${type}</b><br>${timeStr}`).openPopup();
 
-      // Retrieve full address
       const address = await fetchAddress(lat, lng);
 
       const incidentData = {
@@ -397,13 +404,10 @@
       localStorage.setItem('rover_incidents', JSON.stringify(savedIncidents.slice(0, 30)));
 
       renderIncidentCard(incidentData, true);
-
       incidentCount++;
       document.getElementById('badgeCount').textContent = incidentCount;
 
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send("POTHOLE_LOGGED");
-      }
+      sendCommand("POTHOLE_LOGGED");
     }
 
     function renderIncidentCard(data, prepend = true) {
@@ -421,10 +425,10 @@
         <strong style="color:var(--danger)">⚠️ ${data.type}</strong>
         <div style="margin-top:4px;">🕒 <b>Time:</b> ${data.time}</div>
         <div>📍 <b>GPS:</b> ${data.lat}, ${data.lng}</div>
-        <div style="margin-top:4px; color:var(--muted);">🏛️ <b>Location:</b> ${data.address}</div>
-        <div style="margin-top:6px; display:flex; gap:8px;">
+        <div style="margin-top:4px; color:var(--muted);">🏛️ <b>Address:</b> ${data.address}</div>
+        <div style="margin-top:8px; display:flex; gap:8px;">
           <a class="gmaps-btn" href="${mapLink}" target="_blank">🗺️ Open Google Maps</a>
-          ${data.photo ? `<a class="gmaps-btn" style="background:#475569;" href="${data.photo}" download="incident_${data.id}.jpg">⬇ Save Photo</a>` : ''}
+          ${data.photo ? `<a class="gmaps-btn" style="background:#475569;" href="${data.photo}" download="incident_${data.id}.jpg">⬇ Save</a>` : ''}
         </div>
       `;
 
@@ -445,66 +449,112 @@
       document.getElementById('notificationList').innerHTML = '<p style="color: var(--muted); font-size: 0.85rem;">No detections registered yet.</p>';
     }
 
-    // WebSocket Integration
-    function toggleWebSocket() {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.close();
+    function setMode(mode) {
+      const btnM = document.getElementById('btnManual');
+      const btnA = document.getElementById('btnAuto');
+      const manualArea = document.getElementById('manualControlsArea');
+      const autoArea = document.getElementById('autoStatusArea');
+
+      if (mode === 'AUTO') {
+        btnA.classList.add('active');
+        btnM.classList.remove('active');
+        manualArea.style.display = 'none';
+        autoArea.style.display = 'block';
+        sendCommand('MODE_AUTO');
+      } else {
+        btnM.classList.add('active');
+        btnA.classList.remove('active');
+        manualArea.style.display = 'flex';
+        autoArea.style.display = 'none';
+        sendCommand('MODE_MANUAL');
+      }
+    }
+
+    function handleTelemetryData(lat, lng, obstacle) {
+      if (!isNaN(lat) && !isNaN(lng)) {
+        curLat = lat;
+        curLng = lng;
+        document.getElementById('coordsVal').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        marker.setLatLng([lat, lng]);
+        map.panTo([lat, lng]);
+      }
+      const el = document.getElementById('obstacleVal');
+      el.textContent = obstacle;
+      if (obstacle === "FRONT_DETECTED") {
+        el.style.color = "var(--danger)";
+        const now = Date.now();
+        if (now - lastAutoTrigger > 4000) {
+          lastAutoTrigger = now;
+          logIncident("AUTO_POTHOLE_OBSTACLE");
+        }
+      } else {
+        el.style.color = "var(--success)";
+      }
+    }
+
+    function toggleConnection() {
+      const ip = document.getElementById('espIp').value.trim();
+      const statusEl = document.getElementById('wsStatus');
+      const btn = document.getElementById('wsBtn');
+
+      if (statusEl.classList.contains('connected')) {
+        if (ws) ws.close();
+        if (pollTimer) clearInterval(pollTimer);
+        statusEl.textContent = 'Offline';
+        statusEl.className = 'status-pill disconnected';
+        btn.textContent = 'Connect';
         return;
       }
-      const ip = document.getElementById('espIp').value.trim();
-      ws = new WebSocket(`ws://${ip}:81/`);
 
-      ws.onopen = () => {
-        document.getElementById('wsStatus').textContent = "Online";
-        document.getElementById('wsStatus').className = "status-pill connected";
-        document.getElementById('wsBtn').textContent = "Disconnect";
-      };
-
-      ws.onmessage = (event) => {
-        const msg = event.data;
-
-        if (msg.startsWith("GPS:")) {
-          const parts = msg.replace("GPS:", "").split(",");
-          const lat = parseFloat(parts[0]);
-          const lng = parseFloat(parts[1]);
-          if (!isNaN(lat) && !isNaN(lng)) {
-            curLat = lat;
-            curLng = lng;
-            document.getElementById('coordsVal').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-            marker.setLatLng([lat, lng]);
-            map.panTo([lat, lng]);
+      try {
+        ws = new WebSocket(`ws://${ip}:81/`);
+        ws.onopen = () => {
+          statusEl.textContent = 'Online';
+          statusEl.className = 'status-pill connected';
+          btn.textContent = 'Disconnect';
+        };
+        ws.onmessage = (e) => {
+          const msg = e.data;
+          if (msg.startsWith("GPS:")) {
+            const parts = msg.replace("GPS:", "").split(",");
+            handleTelemetryData(parseFloat(parts[0]), parseFloat(parts[1]), document.getElementById('obstacleVal').textContent);
+          } else if (msg.startsWith("OBSTACLE:")) {
+            handleTelemetryData(curLat, curLng, msg.replace("OBSTACLE:", ""));
           }
-        } 
-        else if (msg.startsWith("OBSTACLE:")) {
-          const status = msg.replace("OBSTACLE:", "");
-          const el = document.getElementById('obstacleVal');
-          el.textContent = status;
+        };
+        ws.onerror = () => startHttpPolling(ip);
+      } catch (e) {
+        startHttpPolling(ip);
+      }
+    }
 
-          if (status === "FRONT_DETECTED") {
-            el.style.color = "var(--danger)";
-            const now = Date.now();
-            // Automatically capture every 3.5 seconds when an obstacle/pothole is continuously detected
-            if (now - lastAutoTrigger > 3500) {
-              lastAutoTrigger = now;
-              logIncident("AUTO_POTHOLE_OBSTACLE");
-            }
-          } else {
-            el.style.color = "var(--success)";
-          }
+    function startHttpPolling(ip) {
+      const statusEl = document.getElementById('wsStatus');
+      const btn = document.getElementById('wsBtn');
+      if (pollTimer) clearInterval(pollTimer);
+
+      pollTimer = setInterval(async () => {
+        try {
+          const res = await fetch(`http://${ip}/status`, { cache: 'no-store' });
+          const data = await res.json();
+          statusEl.textContent = 'Online';
+          statusEl.className = 'status-pill connected';
+          btn.textContent = 'Disconnect';
+          handleTelemetryData(data.lat, data.lng, data.obstacle);
+        } catch (e) {
+          statusEl.textContent = 'Offline';
+          statusEl.className = 'status-pill disconnected';
         }
-      };
-
-      ws.onclose = () => {
-        document.getElementById('wsStatus').textContent = "Offline";
-        document.getElementById('wsStatus').className = "status-pill disconnected";
-        document.getElementById('wsBtn').textContent = "Connect";
-      };
-
-      ws.onerror = (err) => console.error("WS error:", err);
+      }, 1000);
     }
 
     function sendCommand(cmd) {
-      if (ws && ws.readyState === WebSocket.OPEN) ws.send(cmd);
+      const ip = document.getElementById('espIp').value.trim();
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(cmd);
+      } else {
+        fetch(`http://${ip}/cmd?action=${cmd}`).catch(() => {});
+      }
     }
   </script>
 </body>
